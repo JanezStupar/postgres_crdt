@@ -340,11 +340,10 @@ packages:
   sql_crdt:
     dependency: "direct main"
     description:
-      name: sql_crdt
-      sha256: db0a4133a63a996d262d7e73b97e6ddc4550f4e3bd2449930627472d622bd946
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.0.3"
+      path: "../sql_crdt"
+      relative: true
+    source: path
+    version: "4.0.0"
   sqlparser:
     dependency: transitive
     description:

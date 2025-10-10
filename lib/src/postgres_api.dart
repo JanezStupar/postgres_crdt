@@ -7,8 +7,17 @@ class PostgresApi extends DatabaseApi {
   PostgresApi(this._connection);
 
   @override
-  Future<void> execute(String sql, [List<Object?>? args]) =>
-      _connection.execute(sql.asQuery, parameters: args, ignoreRows: true);
+  Future<ExecuteResult> execute(String sql, [List<Object?>? args]) async {
+    final result = await _connection.execute(sql.asQuery, parameters: args);
+
+    // Return QueryResult if data was returned, VoidResult otherwise
+    return result.isEmpty
+        ? const VoidResult()
+        : QueryResult(
+            result.map((row) => row.toColumnMap()).toList(),
+            sql: sql,
+          );
+  }
 
   @override
   Future<List<Map<String, Object?>>> query(String sql,
@@ -39,7 +48,7 @@ class _BatchApi extends WriteApi {
   _BatchApi(this._connection);
 
   @override
-  Future<void> execute(String sql, [List<Object?>? args]) async {
+  Future<ExecuteResult> execute(String sql, [List<Object?>? args]) async {
     if (sql != _batchedSql) {
       await _batch?.dispose();
       _batch = await _connection.prepare(sql.asQuery);
@@ -47,6 +56,8 @@ class _BatchApi extends WriteApi {
     }
 
     await _batch!.run(args);
+    // Batch operations don't return data
+    return const VoidResult();
   }
 
   Future<void> commit() async {

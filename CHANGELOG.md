@@ -1,3 +1,36 @@
+## 4.0.0
+
+Breaking changes to support `sql_crdt` 4.0.0:
+
+- **BREAKING**: `execute()` method now returns `ExecuteResult` instead of `void`
+  - Returns `VoidResult` for operations without RETURNING clause
+  - Returns `QueryResult` for operations with RETURNING clause (INSERT/UPDATE/DELETE...RETURNING)
+- Update to `sql_crdt: ^4.0.0` for improved RETURNING support and better PostgreSQL compatibility
+- Full support for `INSERT...RETURNING`, `UPDATE...RETURNING`, and `DELETE...RETURNING` clauses
+- Improved upsert handling with proper `excluded.*` references in `ON CONFLICT` clauses
+
+**Migration Guide:**
+
+Existing code continues to work as-is (the return value can be ignored):
+```dart
+// Still works - result is ignored
+await crdt.execute('INSERT INTO users (name) VALUES (?)', ['Alice']);
+```
+
+New capability - use RETURNING clauses:
+```dart
+// NEW: Get returned data
+final result = await crdt.execute(
+  'INSERT INTO users (name) VALUES (?) RETURNING id, created_at',
+  ['Alice']
+);
+
+if (result case QueryResult(rows: final rows)) {
+  final userId = rows.first['id'];
+  print('Created user with ID: $userId');
+}
+```
+
 ## 3.0.3
 
 - Update dependencies

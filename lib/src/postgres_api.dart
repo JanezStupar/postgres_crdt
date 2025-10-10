@@ -66,5 +66,17 @@ class _BatchApi extends WriteApi {
 }
 
 extension on String {
-  Sql get asQuery => Sql.indexed(this, substitution: '?');
+  Sql get asQuery {
+    // Check if SQL uses PostgreSQL-style $N placeholders
+    final usesPostgresPlaceholders = RegExp(r'(?<!\\)\$\d+').hasMatch(this);
+
+    if (usesPostgresPlaceholders) {
+      // SQL already has $N placeholders, return as-is
+      // The Sql() constructor treats the string as literal SQL with existing $N placeholders
+      return Sql(this);
+    } else {
+      // SQL has ?N placeholders, convert to $N
+      return Sql.indexed(this, substitution: '?');
+    }
+  }
 }

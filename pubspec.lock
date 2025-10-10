@@ -340,9 +340,11 @@ packages:
   sql_crdt:
     dependency: "direct main"
     description:
-      path: "../sql_crdt"
-      relative: true
-    source: path
+      path: "."
+      ref: "feature/postgres_related"
+      resolved-ref: "6af1ef4fa663692286d17cdf19706e18166d004b"
+      url: "https://github.com/JanezStupar/sql_crdt.git"
+    source: git
     version: "4.0.0"
   sqlparser:
     dependency: transitive

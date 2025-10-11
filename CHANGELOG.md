@@ -8,6 +8,7 @@ Breaking changes to support `sql_crdt` 4.0.0:
 - Update to `sql_crdt: ^4.0.0` for improved RETURNING support and better PostgreSQL compatibility
 - Full support for `INSERT...RETURNING`, `UPDATE...RETURNING`, and `DELETE...RETURNING` clauses
 - Improved upsert handling with proper `excluded.*` references in `ON CONFLICT` clauses
+- Add `close()` method to properly clean up database connection pool and release resources
 
 **Migration Guide:**
 

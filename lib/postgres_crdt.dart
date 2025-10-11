@@ -7,7 +7,9 @@ export 'package:postgres/postgres.dart' show SslMode;
 export 'package:sql_crdt/sql_crdt.dart';
 
 class PostgresCrdt extends SqlCrdt {
-  PostgresCrdt._(super.db);
+  final Pool? _pool;
+
+  PostgresCrdt._(super.db, this._pool);
 
   /// Open a database connection as a SqlCrdt instance.
   ///
@@ -41,9 +43,14 @@ class PostgresCrdt extends SqlCrdt {
       ),
     );
 
-    final crdt = PostgresCrdt._(PostgresApi(db));
+    final crdt = PostgresCrdt._(PostgresApi(db), db);
     await crdt.init();
     return crdt;
+  }
+
+  /// Close the database connection and release resources.
+  Future<void> close() async {
+    await _pool?.close();
   }
 
   @override

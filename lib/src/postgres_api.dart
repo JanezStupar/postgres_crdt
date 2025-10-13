@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:postgres/postgres.dart';
 import 'package:sql_crdt/sql_crdt.dart';
 
@@ -8,7 +10,9 @@ class PostgresApi extends DatabaseApi {
 
   @override
   Future<ExecuteResult> execute(String sql, [List<Object?>? args]) async {
-    final result = await _connection.execute(sql.asQuery, parameters: args);
+    final convertedArgs = _convertArgs(args);
+    final query = sql.asQuery;
+    final result = await _connection.execute(query, parameters: convertedArgs);
 
     // Return QueryResult if data was returned, VoidResult otherwise
     return result.isEmpty
@@ -21,10 +25,12 @@ class PostgresApi extends DatabaseApi {
 
   @override
   Future<List<Map<String, Object?>>> query(String sql,
-          [List<Object?>? args]) async =>
-      (await _connection.execute(sql.asQuery, parameters: args))
-          .map((e) => e.toColumnMap())
-          .toList();
+      [List<Object?>? args]) async {
+    final convertedArgs = _convertArgs(args);
+    return (await _connection.execute(sql.asQuery, parameters: convertedArgs))
+        .map((e) => e.toColumnMap())
+        .toList();
+  }
 
   @override
   Future<void> transaction(Future<void> Function(DatabaseApi txn) actions) =>
@@ -55,7 +61,7 @@ class _BatchApi extends WriteApi {
       _batchedSql = sql;
     }
 
-    await _batch!.run(args);
+    await _batch!.run(_convertArgs(args));
     // Batch operations don't return data
     return const VoidResult();
   }
@@ -70,13 +76,52 @@ extension on String {
     // Check if SQL uses PostgreSQL-style $N placeholders
     final usesPostgresPlaceholders = RegExp(r'(?<!\\)\$\d+').hasMatch(this);
 
+    // Check if SQL uses SQLite-style placeholders (numbered or automatic)
+    final usesSqlitePlaceholders = RegExp(r'\?(\d+)?').hasMatch(this);
+
     if (usesPostgresPlaceholders) {
-      // SQL already has $N placeholders, return as-is
-      // The Sql() constructor treats the string as literal SQL with existing $N placeholders
-      return Sql(this);
-    } else {
+      // SQL has $N placeholders - convert to ?N first, then use Sql.indexed
+      // This is needed because Sql() treats the string as literal with no placeholders
+      final sqlWithQuestion = replaceAllMapped(
+        RegExp(r'\$(\d+)'),
+        (match) => '?${match.group(1)}',
+      );
+      final query = Sql.indexed(sqlWithQuestion, substitution: '?');
+      _logPlaceholderStatus(query, this);
+      return query;
+    } else if (usesSqlitePlaceholders) {
       // SQL has ?N placeholders, convert to $N
-      return Sql.indexed(this, substitution: '?');
+      final query = Sql.indexed(this, substitution: '?');
+      _logPlaceholderStatus(query, this);
+      return query;
+    } else {
+      // No placeholders detected - return as-is
+      // This handles queries like "SELECT * FROM table" with no parameters
+      return Sql(this);
     }
   }
+
+  /// Previously emitted placeholder diagnostics; now intentionally silent.
+  void _logPlaceholderStatus(Sql query, String originalSql) {}
+}
+
+/// Ensures binary arguments keep their byte semantics when sent to Postgres.
+List<Object?>? _convertArgs(List<Object?>? args) {
+  if (args == null) return null;
+
+  var didChange = false;
+  final converted = List<Object?>.of(args, growable: false);
+
+  for (var i = 0; i < converted.length; i++) {
+    final value = converted[i];
+    if (value is TypedValue) {
+      continue;
+    }
+    if (value is Uint8List) {
+      converted[i] = TypedValue(Type.byteArray, value);
+      didChange = true;
+    }
+  }
+
+  return didChange ? converted : args;
 }

@@ -3,7 +3,7 @@ import 'package:sql_crdt/sql_crdt.dart';
 
 import 'src/postgres_api.dart';
 
-export 'package:postgres/postgres.dart' show SslMode;
+export 'package:postgres/postgres.dart' show PoolSettings, SslMode;
 export 'package:sql_crdt/sql_crdt.dart';
 
 class PostgresCrdt extends SqlCrdt {
@@ -18,6 +18,11 @@ class PostgresCrdt extends SqlCrdt {
   /// Use [maxConnectionAge] to control how often the connection should reset.
   /// Because of an ongoing memory leak, this defaults to one day.
   /// Set to [null] to disable.
+  ///
+  /// Use [poolSettings] to provide custom pool settings including [onOpen]
+  /// callbacks for per-connection initialization (e.g., setting search_path
+  /// for schema isolation). If provided, [sslMode] and [maxConnectionAge]
+  /// parameters are ignored in favor of the settings in [poolSettings].
   static Future<PostgresCrdt> open(
     String databaseName, {
     String host = 'localhost',
@@ -26,7 +31,14 @@ class PostgresCrdt extends SqlCrdt {
     String? password,
     SslMode? sslMode,
     Duration? maxConnectionAge = const Duration(days: 1),
+    PoolSettings? poolSettings,
   }) async {
+    final settings = poolSettings ??
+        PoolSettings(
+          sslMode: sslMode,
+          maxConnectionAge: maxConnectionAge,
+        );
+
     final db = Pool.withEndpoints(
       [
         Endpoint(
@@ -37,10 +49,7 @@ class PostgresCrdt extends SqlCrdt {
           password: password,
         )
       ],
-      settings: PoolSettings(
-        sslMode: sslMode,
-        maxConnectionAge: maxConnectionAge,
-      ),
+      settings: settings,
     );
 
     final crdt = PostgresCrdt._(PostgresApi(db), db);
@@ -56,7 +65,7 @@ class PostgresCrdt extends SqlCrdt {
   @override
   Future<Iterable<String>> getTables() async => (await query('''
     SELECT table_name FROM information_schema.tables
-    WHERE table_type='BASE TABLE' AND table_schema='public'
+    WHERE table_type='BASE TABLE' AND table_schema=current_schema()
   ''')).map((e) => e['table_name'] as String?).whereType<String>();
 
   @override
@@ -66,6 +75,6 @@ class PostgresCrdt extends SqlCrdt {
       pg_class AS c
       JOIN pg_index AS i ON c.oid = i.indrelid AND i.indisprimary
       JOIN pg_attribute AS a ON c.oid = a.attrelid AND a.attnum = ANY(i.indkey)
-    WHERE c.oid = ?1::regclass
+    WHERE c.oid = (current_schema() || '.' || ?1)::regclass
   ''', [table])).map((e) => e['name'] as String);
 }

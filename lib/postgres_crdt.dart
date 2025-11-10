@@ -63,7 +63,9 @@ class PostgresCrdt extends SqlCrdt {
   }
 
   @override
-  Future<Iterable<String>> getTables({String? schema}) async => (await query('''
+  Future<Iterable<String>> getTables({String? schema}) async {
+    if (schema != null) {
+      return (await query('''
     SELECT t.table_name
     FROM information_schema.tables t
     JOIN information_schema.columns c
@@ -71,8 +73,20 @@ class PostgresCrdt extends SqlCrdt {
      AND c.table_name = t.table_name
      AND c.column_name = 'modified'
     WHERE t.table_type = 'BASE TABLE'
-      ${schema != null ? 'AND t.table_schema = ?' : ''}
-  ''' ${schema != null ? ', [schema]' : ''})).map((e) => e['table_name'] as String?).whereType<String>();
+      AND t.table_schema = ?
+  ''', [schema])).map((e) => e['table_name'] as String?).whereType<String>();
+    } else {
+      return (await query('''
+    SELECT t.table_name
+    FROM information_schema.tables t
+    JOIN information_schema.columns c
+      ON c.table_schema = t.table_schema
+     AND c.table_name = t.table_name
+     AND c.column_name = 'modified'
+    WHERE t.table_type = 'BASE TABLE'
+  ''')).map((e) => e['table_name'] as String?).whereType<String>();
+    }
+  }
 
   @override
   Future<Iterable<String>> getTableKeys(String table, {String? schema}) async {

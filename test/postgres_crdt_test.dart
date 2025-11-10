@@ -112,19 +112,23 @@ Future<void> main() async {
             [2, 'value_b'],
           );
 
-          // Verify getTables() with schema parameter returns only that schema's tables
-          final tablesA = await crdtA.getTables(schema: 'schema_a');
+          // Verify getTables() respects current schema (set via search_path)
+          final tablesA = await crdtA.getTables();
           expect(tablesA, contains('test_table_a'));
           expect(tablesA, isNot(contains('test_table_b')));
 
-          final tablesB = await crdtB.getTables(schema: 'schema_b');
+          final tablesB = await crdtB.getTables();
           expect(tablesB, contains('test_table_b'));
           expect(tablesB, isNot(contains('test_table_a')));
 
-          // Verify getTables() without schema parameter returns all tables
-          final allTables = await crdtA.getTables();
-          expect(allTables, contains('test_table_a'));
-          expect(allTables, contains('test_table_b'));
+          // Verify getTables() with explicit schema parameter
+          final explicitA = await crdtA.getTables(schema: 'schema_a');
+          expect(explicitA, contains('test_table_a'));
+          expect(explicitA, isNot(contains('test_table_b')));
+
+          final explicitB = await crdtB.getTables(schema: 'schema_b');
+          expect(explicitB, contains('test_table_b'));
+          expect(explicitB, isNot(contains('test_table_a')));
 
           // Verify getTableKeys() works with schema isolation
           final keysA = await crdtA.getTableKeys('test_table_a');

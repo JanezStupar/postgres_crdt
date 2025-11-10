@@ -76,6 +76,7 @@ class PostgresCrdt extends SqlCrdt {
     SELECT table_name
     FROM information_schema.tables
     WHERE table_type = 'BASE TABLE'
+      AND table_schema = current_schema()
   ''')).map((e) => e['table_name'] as String?).whereType<String>();
     }
   }

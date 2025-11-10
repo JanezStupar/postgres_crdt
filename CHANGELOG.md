@@ -9,6 +9,10 @@ Breaking changes to support `sql_crdt` 4.0.0:
 - Full support for `INSERT...RETURNING`, `UPDATE...RETURNING`, and `DELETE...RETURNING` clauses
 - Improved upsert handling with proper `excluded.*` references in `ON CONFLICT` clauses
 - Add `close()` method to properly clean up database connection pool and release resources
+- Add support for `PoolSettings` in `PostgresCrdt` to enable advanced connection pool configuration, including schema isolation via `search_path`
+    - New optional `schema` parameter in `getTables()` and `getTableKeys()` for schema-specific queries
+    - Maintains backwards compatibility - methods use `current_schema()` by default
+- Improve PostgreSQL parameter handling: add `_convertArgs` for binary argument support, enhance placeholder compatibility, and refactor query execution logic
 
 **Migration Guide:**
 

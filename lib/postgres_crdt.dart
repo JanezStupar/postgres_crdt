@@ -63,13 +63,30 @@ class PostgresCrdt extends SqlCrdt {
   }
 
   @override
-  Future<Iterable<String>> getTables() async => (await query('''
-    SELECT table_name FROM information_schema.tables
-    WHERE table_type='BASE TABLE' AND table_schema=current_schema()
-  ''')).map((e) => e['table_name'] as String?).whereType<String>();
+  Future<Iterable<String>> getTables({String? schema}) async => (await query('''
+    SELECT t.table_name
+    FROM information_schema.tables t
+    JOIN information_schema.columns c
+      ON c.table_schema = t.table_schema
+     AND c.table_name = t.table_name
+     AND c.column_name = 'modified'
+    WHERE t.table_type = 'BASE TABLE'
+      ${schema != null ? 'AND t.table_schema = ?' : ''}
+  ''' ${schema != null ? ', [schema]' : ''})).map((e) => e['table_name'] as String?).whereType<String>();
 
   @override
-  Future<Iterable<String>> getTableKeys(String table) async => (await query('''
+  Future<Iterable<String>> getTableKeys(String table, {String? schema}) async {
+    if (schema != null) {
+      return (await query('''
+    SELECT a.attname AS name
+    FROM
+      pg_class AS c
+      JOIN pg_index AS i ON c.oid = i.indrelid AND i.indisprimary
+      JOIN pg_attribute AS a ON c.oid = a.attrelid AND a.attnum = ANY(i.indkey)
+    WHERE c.oid = (?1 || '.' || ?2)::regclass
+  ''', [schema, table])).map((e) => e['name'] as String);
+    } else {
+      return (await query('''
     SELECT a.attname AS name
     FROM
       pg_class AS c
@@ -77,4 +94,6 @@ class PostgresCrdt extends SqlCrdt {
       JOIN pg_attribute AS a ON c.oid = a.attrelid AND a.attnum = ANY(i.indkey)
     WHERE c.oid = (current_schema() || '.' || ?1)::regclass
   ''', [table])).map((e) => e['name'] as String);
+    }
+  }
 }

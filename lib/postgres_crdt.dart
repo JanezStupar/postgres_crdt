@@ -8,9 +8,20 @@ export 'package:sql_crdt/sql_crdt.dart';
 
 class PostgresCrdt extends SqlCrdt {
   final Pool? _pool;
+  final Set<String>? _onlyTables;
   final Set<String>? _excludeTables;
 
-  PostgresCrdt._(super.db, this._pool, [this._excludeTables]);
+  PostgresCrdt._(
+    super.db,
+    this._pool, {
+    Set<String>? onlyTables,
+    Set<String>? excludeTables,
+  })  : _onlyTables = onlyTables,
+        _excludeTables = excludeTables,
+        assert(
+          onlyTables == null || excludeTables == null,
+          'onlyTables and excludeTables cannot be combined',
+        );
 
   /// Open a database connection as a SqlCrdt instance.
   ///
@@ -25,6 +36,10 @@ class PostgresCrdt extends SqlCrdt {
   /// for schema isolation). If provided, [sslMode] and [maxConnectionAge]
   /// parameters are ignored in favor of the settings in [poolSettings].
   ///
+  /// Use [onlyTables] to explicitly declare which tables participate in CRDT
+  /// initialization and discovery. When provided, only tables in this set will
+  /// appear in [getTables] results.
+  ///
   /// Use [excludeTables] to specify tables that should be excluded from CRDT
   /// initialization and discovery. Excluded tables will not appear in
   /// [getTables] results.
@@ -37,6 +52,7 @@ class PostgresCrdt extends SqlCrdt {
     SslMode? sslMode,
     Duration? maxConnectionAge = const Duration(days: 1),
     PoolSettings? poolSettings,
+    Set<String>? onlyTables,
     Set<String>? excludeTables,
   }) async {
     final settings = poolSettings ??
@@ -58,7 +74,12 @@ class PostgresCrdt extends SqlCrdt {
       settings: settings,
     );
 
-    final crdt = PostgresCrdt._(PostgresApi(db), db, excludeTables);
+    final crdt = PostgresCrdt._(
+      PostgresApi(db),
+      db,
+      onlyTables: onlyTables,
+      excludeTables: excludeTables,
+    );
     await crdt.init();
     return crdt;
   }
@@ -72,36 +93,48 @@ class PostgresCrdt extends SqlCrdt {
   Future<Iterable<String>> getTables({String? schema}) async {
     final excludedList = _excludeTables?.toList();
     final hasExclusions = excludedList != null && excludedList.isNotEmpty;
+    final columnFilter = "AND c.column_name = 'modified'";
 
     if (schema != null) {
       final baseQuery = '''
-    SELECT table_name
-    FROM information_schema.tables
-    WHERE table_type = 'BASE TABLE'
-      AND table_schema = ?''';
+    SELECT DISTINCT t.table_name
+    FROM information_schema.tables t
+    JOIN information_schema.columns c
+      ON c.table_schema = t.table_schema
+     AND c.table_name = t.table_name
+    WHERE t.table_type = 'BASE TABLE'
+      AND t.table_schema = ? $columnFilter''';
       final query = hasExclusions
           ? '''$baseQuery
-      AND table_name NOT IN (${List.filled(excludedList.length, '?').join(', ')})'''
-          : baseQuery;
+      AND t.table_name NOT IN (${List.filled(excludedList.length, '?').join(', ')})
+    ORDER BY t.table_name'''
+          : '''$baseQuery
+    ORDER BY t.table_name''';
 
       final args = [schema, if (hasExclusions) ...excludedList];
-      return (await this.query(query, args))
+      return _filterTables((await this.query(query, args))
           .map((e) => e['table_name'] as String?)
-          .whereType<String>();
+          .whereType<String>());
     } else {
       final baseQuery = '''
-    SELECT table_name
-    FROM information_schema.tables
-    WHERE table_type = 'BASE TABLE'
-      AND table_schema = current_schema()''';
+    SELECT DISTINCT t.table_name
+    FROM information_schema.tables t
+    JOIN information_schema.columns c
+      ON c.table_schema = t.table_schema
+     AND c.table_name = t.table_name
+    WHERE t.table_type = 'BASE TABLE'
+      AND t.table_schema = current_schema() $columnFilter''';
       final query = hasExclusions
           ? '''$baseQuery
-      AND table_name NOT IN (${List.filled(excludedList.length, '?').join(', ')})'''
-          : baseQuery;
+      AND t.table_name NOT IN (${List.filled(excludedList.length, '?').join(', ')})
+    ORDER BY t.table_name'''
+          : '''$baseQuery
+    ORDER BY t.table_name''';
 
-      return (await this.query(query, hasExclusions ? excludedList : null))
+      return _filterTables((await this.query(
+              query, hasExclusions ? excludedList : null))
           .map((e) => e['table_name'] as String?)
-          .whereType<String>();
+          .whereType<String>());
     }
   }
 
@@ -127,4 +160,21 @@ class PostgresCrdt extends SqlCrdt {
   ''', [table])).map((e) => e['name'] as String);
     }
   }
+
+  Iterable<String> _filterTables(Iterable<String> tables) {
+    Iterable<String> filtered = tables;
+
+    if (_onlyTables != null && _onlyTables!.isNotEmpty) {
+      final allowed = _onlyTables!;
+      filtered = filtered.where(allowed.contains);
+    }
+
+    if (_excludeTables != null && _excludeTables!.isNotEmpty) {
+      final excluded = _excludeTables!;
+      filtered = filtered.where((table) => !excluded.contains(table));
+    }
+
+    return filtered;
+  }
+
 }

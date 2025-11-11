@@ -1,3 +1,4 @@
+import 'package:postgres/postgres.dart';
 import 'package:postgres_crdt/postgres_crdt.dart';
 import 'package:test/test.dart';
 
@@ -170,7 +171,8 @@ Future<void> main() async {
       }
     });
 
-    test('poolSettings parameter takes precedence over sslMode and maxConnectionAge',
+    test(
+        'poolSettings parameter takes precedence over sslMode and maxConnectionAge',
         () async {
       var onOpenCalled = false;
 
@@ -278,13 +280,84 @@ Future<void> main() async {
           expect(
             tableList.contains('test_table_empty'),
             isTrue,
-            reason: 'test_table_empty should appear when excludeTables is empty',
+            reason:
+                'test_table_empty should appear when excludeTables is empty',
           );
         } finally {
           await testCrdt.close();
         }
       } finally {
         await crdt.execute('DROP TABLE IF EXISTS test_table_empty');
+      }
+    });
+
+    test('onlyTables limits schema discovery to provided set', () async {
+      await crdt.execute('''
+        CREATE TABLE IF NOT EXISTS only_table_a (
+          id INTEGER PRIMARY KEY,
+          name TEXT
+        )
+      ''');
+      await crdt.execute('''
+        CREATE TABLE IF NOT EXISTS only_table_b (
+          id INTEGER PRIMARY KEY,
+          name TEXT
+        )
+      ''');
+
+      try {
+        final testCrdt = await PostgresCrdt.open(
+          'testdb',
+          username: 'postgres',
+          password: 'postgres',
+          sslMode: SslMode.disable,
+          onlyTables: {'only_table_a'},
+        );
+
+        try {
+          final tables = await testCrdt.getTables();
+          expect(tables, contains('only_table_a'));
+          expect(tables, isNot(contains('only_table_b')));
+        } finally {
+          await testCrdt.close();
+        }
+      } finally {
+        await crdt.execute('DROP TABLE IF EXISTS only_table_a');
+        await crdt.execute('DROP TABLE IF EXISTS only_table_b');
+      }
+    });
+
+    test('getTables ignores tables missing CRDT metadata', () async {
+      // Create a direct database connection to bypass CRDT operations
+      final directPool = Pool.withEndpoints(
+        [
+          Endpoint(
+            host: 'localhost',
+            port: 5432,
+            database: 'testdb',
+            username: 'postgres',
+            password: 'postgres',
+          )
+        ],
+        settings: PoolSettings(sslMode: SslMode.disable),
+      );
+
+      try {
+        // Create a table without CRDT metadata using direct connection
+        await directPool.execute('''
+          CREATE TABLE IF NOT EXISTS no_crdt_table (
+            id INTEGER PRIMARY KEY,
+            name TEXT
+          )
+        ''');
+
+        // Verify the table doesn't appear in getTables()
+        final tables = await crdt.getTables();
+        expect(tables, isNot(contains('no_crdt_table')));
+      } finally {
+        // Clean up using direct connection
+        await directPool.execute('DROP TABLE IF EXISTS no_crdt_table');
+        await directPool.close();
       }
     });
   });

@@ -45,7 +45,7 @@ void runSqlCrdtTests(SqlCrdt crdt) {
         )
       ''');
       expect(await crdt.query('SELECT * FROM test'), []);
-      expect((await crdt.getTables()).toList(), ['users', 'test']);
+      expect((await crdt.getTables()).toList(), ['test', 'users']);
     });
 
     test('Insert', () async {

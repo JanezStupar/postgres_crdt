@@ -334,7 +334,7 @@ packages:
     description:
       path: "."
       ref: "feature/postgres_related"
-      resolved-ref: "146b849fed426e80d24d4eaafb5ff6c6595b0402"
+      resolved-ref: "7d006faed89e13ae9377d3b2c05e78662964b9bb"
       url: "https://github.com/JanezStupar/sql_crdt.git"
     source: git
     version: "4.0.0"

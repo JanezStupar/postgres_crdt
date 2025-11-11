@@ -13,6 +13,12 @@ Breaking changes to support `sql_crdt` 4.0.0:
     - New optional `schema` parameter in `getTables()` and `getTableKeys()` for schema-specific queries
     - Maintains backwards compatibility - methods use `current_schema()` by default
 - Improve PostgreSQL parameter handling: add `_convertArgs` for binary argument support, enhance placeholder compatibility, and refactor query execution logic
+- Add `excludeTables` parameter to `PostgresCrdt.open()` for filtering tables from CRDT operations
+    - Tables in the exclusion set are filtered at the SQL level in `getTables()` using `NOT IN` clause with bind parameters
+    - Prevents excluded tables from participating in CRDT initialization and discovery
+    - Useful for excluding system tables or tables without CRDT metadata columns
+    - Maintains backwards compatibility - `excludeTables` is optional and defaults to null
+- Add regression tests verifying `excludeTables` functionality filters tables correctly
 
 **Migration Guide:**
 

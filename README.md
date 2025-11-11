@@ -1,5 +1,13 @@
-Dart implementation of Conflict-free Replicated Data Types (CRDTs) using PostgreSQL.  
+Dart implementation of Conflict-free Replicated Data Types (CRDTs) using PostgreSQL.
 This package implements [sql_crdt](https://github.com/cachapa/sql_crdt).
+
+## Features
+
+- **Full CRDT support** with PostgreSQL backend
+- **Schema isolation** via `PoolSettings` and `search_path` configuration
+- **Table filtering** with `excludeTables` parameter to prevent specific tables from participating in CRDT operations
+- **RETURNING clause support** for INSERT/UPDATE/DELETE operations
+- **Prepared statements** for efficient bulk operations
 
 ## Setup
 

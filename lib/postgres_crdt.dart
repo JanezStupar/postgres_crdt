@@ -8,8 +8,9 @@ export 'package:sql_crdt/sql_crdt.dart';
 
 class PostgresCrdt extends SqlCrdt {
   final Pool? _pool;
+  final Set<String>? _excludeTables;
 
-  PostgresCrdt._(super.db, this._pool);
+  PostgresCrdt._(super.db, this._pool, [this._excludeTables]);
 
   /// Open a database connection as a SqlCrdt instance.
   ///
@@ -23,6 +24,10 @@ class PostgresCrdt extends SqlCrdt {
   /// callbacks for per-connection initialization (e.g., setting search_path
   /// for schema isolation). If provided, [sslMode] and [maxConnectionAge]
   /// parameters are ignored in favor of the settings in [poolSettings].
+  ///
+  /// Use [excludeTables] to specify tables that should be excluded from CRDT
+  /// initialization and discovery. Excluded tables will not appear in
+  /// [getTables] results.
   static Future<PostgresCrdt> open(
     String databaseName, {
     String host = 'localhost',
@@ -32,6 +37,7 @@ class PostgresCrdt extends SqlCrdt {
     SslMode? sslMode,
     Duration? maxConnectionAge = const Duration(days: 1),
     PoolSettings? poolSettings,
+    Set<String>? excludeTables,
   }) async {
     final settings = poolSettings ??
         PoolSettings(
@@ -52,7 +58,7 @@ class PostgresCrdt extends SqlCrdt {
       settings: settings,
     );
 
-    final crdt = PostgresCrdt._(PostgresApi(db), db);
+    final crdt = PostgresCrdt._(PostgresApi(db), db, excludeTables);
     await crdt.init();
     return crdt;
   }
@@ -64,20 +70,38 @@ class PostgresCrdt extends SqlCrdt {
 
   @override
   Future<Iterable<String>> getTables({String? schema}) async {
+    final excludedList = _excludeTables?.toList();
+    final hasExclusions = excludedList != null && excludedList.isNotEmpty;
+
     if (schema != null) {
-      return (await query('''
+      final baseQuery = '''
     SELECT table_name
     FROM information_schema.tables
     WHERE table_type = 'BASE TABLE'
-      AND table_schema = ?
-  ''', [schema])).map((e) => e['table_name'] as String?).whereType<String>();
+      AND table_schema = ?''';
+      final query = hasExclusions
+          ? '''$baseQuery
+      AND table_name NOT IN (${List.filled(excludedList.length, '?').join(', ')})'''
+          : baseQuery;
+
+      final args = [schema, if (hasExclusions) ...excludedList];
+      return (await this.query(query, args))
+          .map((e) => e['table_name'] as String?)
+          .whereType<String>();
     } else {
-      return (await query('''
+      final baseQuery = '''
     SELECT table_name
     FROM information_schema.tables
     WHERE table_type = 'BASE TABLE'
-      AND table_schema = current_schema()
-  ''')).map((e) => e['table_name'] as String?).whereType<String>();
+      AND table_schema = current_schema()''';
+      final query = hasExclusions
+          ? '''$baseQuery
+      AND table_name NOT IN (${List.filled(excludedList.length, '?').join(', ')})'''
+          : baseQuery;
+
+      return (await this.query(query, hasExclusions ? excludedList : null))
+          .map((e) => e['table_name'] as String?)
+          .whereType<String>();
     }
   }
 

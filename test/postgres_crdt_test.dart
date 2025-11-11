@@ -199,5 +199,93 @@ Future<void> main() async {
         await testCrdt.close();
       }
     });
+
+    test('excludeTables filters tables from getTables()', () async {
+      // Create test tables
+      await crdt.execute('''
+        CREATE TABLE IF NOT EXISTS included_table (
+          id INTEGER NOT NULL,
+          name TEXT,
+          PRIMARY KEY (id)
+        )
+      ''');
+      await crdt.execute('''
+        CREATE TABLE IF NOT EXISTS excluded_table (
+          id INTEGER NOT NULL,
+          name TEXT,
+          PRIMARY KEY (id)
+        )
+      ''');
+
+      try {
+        // Create CRDT instance with excludeTables
+        final testCrdt = await PostgresCrdt.open(
+          'testdb',
+          username: 'postgres',
+          password: 'postgres',
+          sslMode: SslMode.disable,
+          excludeTables: {'excluded_table'},
+        );
+
+        try {
+          // Get tables and verify excluded table is not in the list
+          final tables = await testCrdt.getTables();
+          final tableList = tables.toList();
+
+          expect(
+            tableList.contains('excluded_table'),
+            isFalse,
+            reason: 'excluded_table should not appear in getTables() results',
+          );
+          expect(
+            tableList.contains('included_table'),
+            isTrue,
+            reason: 'included_table should appear in getTables() results',
+          );
+        } finally {
+          await testCrdt.close();
+        }
+      } finally {
+        await crdt.execute('DROP TABLE IF EXISTS included_table');
+        await crdt.execute('DROP TABLE IF EXISTS excluded_table');
+      }
+    });
+
+    test('excludeTables with empty set still retrieves all tables', () async {
+      // Create test table
+      await crdt.execute('''
+        CREATE TABLE IF NOT EXISTS test_table_empty (
+          id INTEGER NOT NULL,
+          name TEXT,
+          PRIMARY KEY (id)
+        )
+      ''');
+
+      try {
+        // Create CRDT instance with empty excludeTables set
+        final testCrdt = await PostgresCrdt.open(
+          'testdb',
+          username: 'postgres',
+          password: 'postgres',
+          sslMode: SslMode.disable,
+          excludeTables: <String>{},
+        );
+
+        try {
+          final tables = await testCrdt.getTables();
+          final tableList = tables.toList();
+
+          expect(
+            tableList.contains('test_table_empty'),
+            isTrue,
+            reason: 'test_table_empty should appear when excludeTables is empty',
+          );
+        } finally {
+          await testCrdt.close();
+        }
+      } finally {
+        await crdt.execute('DROP TABLE IF EXISTS test_table_empty');
+      }
+    });
   });
 }
